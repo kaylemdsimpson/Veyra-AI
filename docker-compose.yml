@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # ─── HTTP Server ────────────────────────────────────────────
+  server:
+    build: .
+    command: node dist/server.js
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+
+  # ─── Worker Process ─────────────────────────────────────────
+  worker:
+    build: .
+    command: node dist/workers/index.js
+    env_file: .env
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # ─── Scheduler Process ─────────────────────────────────────
+  scheduler:
+    build: .
+    command: node dist/scheduler/index.js
+    env_file: .env
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+
+  # ─── Redis ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # ─── Postgres (local dev only — production uses Supabase) ──
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: veyra
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  pg-data:
