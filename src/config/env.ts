@@ -11,26 +11,26 @@ const envSchema = z.object({
   // Redis
   REDIS_URL: z.string().default("redis://localhost:6379"),
 
-  // Shopify
-  SHOPIFY_API_KEY: z.string().min(1),
-  SHOPIFY_API_SECRET: z.string().min(1),
-  SHOPIFY_SCOPES: z.string().min(1),
-  SHOPIFY_APP_URL: z.string().url(),
-  SHOPIFY_WEBHOOK_SECRET: z.string().min(1),
+  // Shopify — optional at boot, required when a merchant connects
+  SHOPIFY_API_KEY: z.string().default(""),
+  SHOPIFY_API_SECRET: z.string().default(""),
+  SHOPIFY_SCOPES: z.string().default("read_checkouts,read_orders,write_script_tags,read_customers,write_discounts"),
+  SHOPIFY_APP_URL: z.string().default(""),
+  SHOPIFY_WEBHOOK_SECRET: z.string().default(""),
 
-  // Stripe
-  STRIPE_SECRET_KEY: z.string().min(1),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  STRIPE_PRICE_ID: z.string().min(1),
+  // Stripe — optional at boot, required for billing
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  STRIPE_PRICE_ID: z.string().default(""),
 
-  // Email
-  RESEND_API_KEY: z.string().min(1),
-  RESEND_FROM_EMAIL: z.string().email(),
+  // Email — optional at boot, required for sending recovery emails
+  RESEND_API_KEY: z.string().default(""),
+  RESEND_FROM_EMAIL: z.string().default(""),
 
-  // Twilio
-  TWILIO_ACCOUNT_SID: z.string().min(1),
-  TWILIO_AUTH_TOKEN: z.string().min(1),
-  TWILIO_PHONE_NUMBER: z.string().min(1),
+  // Twilio — optional at boot, required for SMS/WhatsApp
+  TWILIO_ACCOUNT_SID: z.string().default(""),
+  TWILIO_AUTH_TOKEN: z.string().default(""),
+  TWILIO_PHONE_NUMBER: z.string().default(""),
   TWILIO_WHATSAPP_NUMBER: z.string().default("whatsapp:+14155238886"),
 
   // App
@@ -51,8 +51,13 @@ export function loadEnv(): Env {
   if (_env) return _env;
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    console.error("Invalid environment variables:", result.error.flatten().fieldErrors);
-    throw new Error("Invalid environment configuration");
+    const fields = result.error.flatten().fieldErrors;
+    console.error("──── Missing / invalid environment variables ────");
+    for (const [key, errors] of Object.entries(fields)) {
+      console.error(`  ${key}: ${(errors as string[]).join(", ")}`);
+    }
+    console.error("─────────────────────────────────────────────────");
+    throw new Error("Invalid environment configuration — see above for details");
   }
   _env = result.data;
   return _env;

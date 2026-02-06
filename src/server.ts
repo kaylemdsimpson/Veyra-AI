@@ -30,7 +30,9 @@ async function start() {
   // Plugins
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
-    origin: env().NODE_ENV === "production" ? env().SHOPIFY_APP_URL : true,
+    origin: env().NODE_ENV === "production" && env().SHOPIFY_APP_URL
+      ? env().SHOPIFY_APP_URL
+      : true,
     credentials: true,
   });
   await app.register(cookie);
