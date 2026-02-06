@@ -3,6 +3,7 @@ import { abandons, customers, coupons, stores } from "../../db/schema/index.js";
 import { eq, and, gt, desc } from "drizzle-orm";
 import { createLogger } from "../../lib/logger.js";
 import type { StoreSettings } from "../../db/schema/stores.js";
+import { calculateDiscountTiming } from "../25-discount-timing/service.js";
 
 const log = createLogger("flow:discount-eligibility");
 
@@ -20,7 +21,7 @@ const log = createLogger("flow:discount-eligibility");
  *     → First touch is always NO DISCOUNT (try organic first)
  *  4. Is the cart value high enough to justify a discount?
  *     → Cart under $25 → NO DISCOUNT (margins too thin)
- *  5. Pass all gates → ELIGIBLE for discount (calculated in Flow 24)
+ *  5. Pass all gates → Use Flow 25 (Discount Timing) to determine WHEN
  */
 
 export interface EligibilityResult {
@@ -104,18 +105,34 @@ export async function checkDiscountEligibility(
     };
   }
 
-  // ─── Eligible ───────────────────────────────────────────────
-  // Discount appears on message step 2 (for 2-msg sequence) or step 3 (for 3-msg)
-  const discountStep = Math.max(2, maxMessages - 1);
+  // ─── Eligible → Use Flow 25 to determine timing ────────────
+  const timing = calculateDiscountTiming({
+    totalMessages: maxMessages,
+    discountSensitivity,
+    recoveryScore,
+    message1Opened: false, // Not yet known at sequence build time
+    message1Clicked: false,
+  });
+
+  const discountStep = timing.introduceAtStep;
+
+  if (discountStep === 0) {
+    // Flow 25 decided no discount for this configuration
+    return {
+      eligible: false,
+      reason: timing.reason,
+      sequenceStepForDiscount: 0,
+    };
+  }
 
   log.info(
-    { abandonId, recoveryScore, discountSensitivity, discountStep },
+    { abandonId, recoveryScore, discountSensitivity, discountStep, timingReason: timing.reason },
     "Customer eligible for discount",
   );
 
   return {
     eligible: true,
-    reason: "Passed all eligibility gates",
+    reason: `Passed all gates; ${timing.reason}`,
     sequenceStepForDiscount: discountStep,
   };
 }

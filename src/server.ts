@@ -15,6 +15,7 @@ import { webhookRoutes } from "./flows/02-webhook-registration/routes.js";
 import { trackingRoutes } from "./flows/37-open-tracking/routes.js";
 import { dashboardRoutes } from "./flows/48-dashboard-metrics/routes.js";
 import { stripeWebhookRoutes } from "./flows/44-stripe-usage-reporter/routes.js";
+import { ingestRoutes } from "./flows/09-cart-abandon-detector/routes.js";
 
 loadEnv();
 const log = createLogger("server");
@@ -44,13 +45,14 @@ async function start() {
   await app.register(trackingRoutes, { prefix: "/t" });
   await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
   await app.register(stripeWebhookRoutes, { prefix: "/webhooks/stripe" });
+  await app.register(ingestRoutes, { prefix: "/ingest" });
 
   // Global error handler
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error: unknown, _request, reply) => {
     log.error({ err: error }, "Unhandled error");
     const statusCode = (error as any).statusCode ?? 500;
     reply.status(statusCode).send({
-      error: error.message,
+      error: (error as any).message ?? "Unknown error",
       code: (error as any).code ?? "INTERNAL_ERROR",
     });
   });

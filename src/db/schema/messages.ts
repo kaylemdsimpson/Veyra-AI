@@ -66,9 +66,9 @@ export const messages = pgTable("messages", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_messages_abandon").on(table.abandonId),
-  index("idx_messages_store_status").on(table.storeId, table.status),
-  index("idx_messages_scheduled").on(table.scheduledFor),
-  index("idx_messages_tracking").on(table.trackingId),
-]);
+}, (table) => ({
+  idxMessagesAbandon: index("idx_messages_abandon").on(table.abandonId),
+  idxMessagesStoreStatus: index("idx_messages_store_status").on(table.storeId, table.status),
+  idxMessagesScheduled: index("idx_messages_scheduled").on(table.scheduledFor),
+  idxMessagesTracking: index("idx_messages_tracking").on(table.trackingId),
+}));

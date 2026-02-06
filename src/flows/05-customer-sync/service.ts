@@ -38,11 +38,11 @@ export async function syncAllCustomers(storeId: string, shop: string): Promise<v
   let totalSynced = 0;
 
   do {
-    const endpoint = pageInfo
+    const endpoint: string = pageInfo
       ? `customers.json?limit=250&page_info=${pageInfo}`
       : "customers.json?limit=250";
 
-    const response = await shopifyRequest<{ customers: ShopifyCustomer[] }>({
+    const response: { customers: ShopifyCustomer[] } = await shopifyRequest<{ customers: ShopifyCustomer[] }>({
       shop,
       accessToken,
       endpoint,

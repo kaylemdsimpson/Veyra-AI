@@ -1,9 +1,10 @@
 import { getDb } from "../../db/client.js";
 import { abandons, customers } from "../../db/schema/index.js";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { createLogger } from "../../lib/logger.js";
 import { enqueue, QUEUES } from "../../lib/queue.js";
 import { eventBus, EVENTS } from "../../lib/event-bus.js";
+import { matchOrderToAbandon } from "../39-conversion-matcher/service.js";
 
 const log = createLogger("flow:order-created");
 
@@ -23,9 +24,9 @@ interface ShopifyOrder {
  * Flow 11: Order Created Listener
  *
  * When an order is created:
- *  1. Check if it matches any active abandon (by checkout_token, cart_token, or email)
- *  2. If matched → trigger attribution resolver
- *  3. Update customer lifetime metrics
+ *  1. Update customer lifetime metrics
+ *  2. Use Flow 39 (Conversion Matcher) to find matching abandon
+ *  3. If matched → trigger Flow 12 (Order Attribution Resolver)
  */
 export async function handleOrderCreated(
   storeId: string,
@@ -63,58 +64,41 @@ export async function handleOrderCreated(
     }
   }
 
-  // Find matching active abandons
-  const activeStates = ["detected", "qualified", "scoring", "sequencing", "awaiting_send", "sending", "engaged"] as const;
-  let matchedAbandon = null;
+  // Use Flow 39: Conversion Matcher for multi-signal matching
+  const match = await matchOrderToAbandon(
+    storeId,
+    String(payload.id),
+    payload.email,
+    payload.checkout_token,
+    payload.cart_token,
+    payload.discount_codes.map((dc) => dc.code),
+  );
 
-  // Match by checkout token (highest confidence)
-  if (payload.checkout_token) {
-    matchedAbandon = await db.query.abandons.findFirst({
-      where: and(
-        eq(abandons.storeId, storeId),
-        eq(abandons.shopifyCheckoutToken, payload.checkout_token),
-        inArray(abandons.state, [...activeStates]),
-      ),
+  if (match.abandonId) {
+    const matchedAbandon = await db.query.abandons.findFirst({
+      where: eq(abandons.id, match.abandonId),
     });
-  }
 
-  // Match by cart token
-  if (!matchedAbandon && payload.cart_token) {
-    matchedAbandon = await db.query.abandons.findFirst({
-      where: and(
-        eq(abandons.storeId, storeId),
-        eq(abandons.shopifyCartToken, payload.cart_token),
-        inArray(abandons.state, [...activeStates]),
-      ),
-    });
-  }
-
-  // Match by email (lowest confidence)
-  if (!matchedAbandon && payload.email) {
-    matchedAbandon = await db.query.abandons.findFirst({
-      where: and(
-        eq(abandons.storeId, storeId),
-        eq(abandons.email, payload.email),
-        inArray(abandons.state, [...activeStates]),
-      ),
-    });
-  }
-
-  if (matchedAbandon) {
     await enqueue(QUEUES.RECOVERY_ATTRIBUTION, {
-      abandonId: matchedAbandon.id,
+      abandonId: match.abandonId,
       storeId,
       orderId: String(payload.id),
       orderTotal: payload.total_price,
       currency: payload.currency,
-      checkoutTokenMatch: payload.checkout_token === matchedAbandon.shopifyCheckoutToken,
-      cartTokenMatch: payload.cart_token === matchedAbandon.shopifyCartToken,
+      checkoutTokenMatch: match.matchType === "checkout_token",
+      cartTokenMatch: match.matchType === "cart_token",
       discountCodes: payload.discount_codes,
     });
 
     log.info(
-      { storeId, abandonId: matchedAbandon.id, orderId: payload.id },
-      "Order matched to abandon, triggering attribution",
+      {
+        storeId,
+        abandonId: match.abandonId,
+        orderId: payload.id,
+        matchType: match.matchType,
+        confidence: match.confidence,
+      },
+      "Order matched to abandon via conversion matcher",
     );
   } else {
     log.debug({ storeId, orderId: payload.id }, "Order does not match any active abandon");

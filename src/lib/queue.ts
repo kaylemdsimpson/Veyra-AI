@@ -1,6 +1,7 @@
 import { Queue, Worker, Job, QueueEvents, type ConnectionOptions } from "bullmq";
 import { createLogger } from "./logger.js";
 import { env } from "../config/env.js";
+import { logError } from "../flows/47-error-logging/service.js";
 
 const log = createLogger("queue");
 
@@ -15,10 +16,8 @@ export const QUEUES = {
   ABANDON_DETECT: "abandon-detect",
   ABANDON_NORMALISE: "abandon-normalise",
   ABANDON_SCORE: "abandon-score",
-  ABANDON_EXPIRE: "abandon-expire",
 
   // Recovery
-  RECOVERY_SEQUENCE: "recovery-sequence",
   RECOVERY_ATTRIBUTION: "recovery-attribution",
 
   // Messaging
@@ -29,16 +28,10 @@ export const QUEUES = {
   // Discount
   DISCOUNT_EVALUATE: "discount-evaluate",
   COUPON_CREATE: "coupon-create",
-  COUPON_EXPIRE: "coupon-expire",
 
   // Billing
   LEDGER_WRITE: "ledger-write",
-  BILLING_AGGREGATE: "billing-aggregate",
   STRIPE_REPORT: "stripe-report",
-
-  // Ops
-  METRICS_BUILD: "metrics-build",
-  HEALTH_CHECK: "health-check",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -119,6 +112,18 @@ export function createWorker<T>(config: WorkerConfig<T>): Worker<T> {
           { queue: config.queueName, jobId: job.id, err, attempt: job.attemptsMade },
           "Job failed",
         );
+        // Flow 47: Centralised error logging
+        logError({
+          flow: config.queueName,
+          severity: job.attemptsMade >= 2 ? "error" : "warning",
+          message: err instanceof Error ? err.message : "Unknown job error",
+          storeId: (job.data as any)?.storeId,
+          metadata: {
+            jobId: job.id,
+            attempt: job.attemptsMade,
+            queue: config.queueName,
+          },
+        }).catch(() => {}); // Fire-and-forget; don't let logging errors propagate
         throw err;
       }
     },

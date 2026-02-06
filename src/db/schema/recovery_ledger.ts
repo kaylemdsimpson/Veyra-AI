@@ -30,7 +30,7 @@ export const recoveryLedger = pgTable("recovery_ledger", {
 
   recoveredAt: timestamp("recovered_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_ledger_store_period").on(table.storeId, table.billingPeriod),
-  index("idx_ledger_store_date").on(table.storeId, table.recoveredAt),
-]);
+}, (table) => ({
+  idxLedgerStorePeriod: index("idx_ledger_store_period").on(table.storeId, table.billingPeriod),
+  idxLedgerStoreDate: index("idx_ledger_store_date").on(table.storeId, table.recoveredAt),
+}));

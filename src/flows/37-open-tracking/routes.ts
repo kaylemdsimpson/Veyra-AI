@@ -4,7 +4,7 @@ import { messages, customers } from "../../db/schema/index.js";
 import { eq } from "drizzle-orm";
 import { createLogger } from "../../lib/logger.js";
 import { eventBus, EVENTS } from "../../lib/event-bus.js";
-import { transitionAbandonState } from "../16-recovery-state-machine/service.js";
+import { handleClick } from "../38-click-tracking/service.js";
 
 const log = createLogger("flow:tracking");
 
@@ -15,10 +15,10 @@ const TRACKING_PIXEL = Buffer.from(
 );
 
 /**
- * Flows 37 & 38: Open Tracking & Click Tracking
+ * Flows 37 & 38: Open Tracking & Click Tracking HTTP endpoints
  *
- * /t/open/:trackingId  — Records email opens via tracking pixel
- * /t/click/:trackingId — Records link clicks and redirects to destination
+ * /t/open/:trackingId  — Flow 37: Records email opens via tracking pixel
+ * /t/click/:trackingId — Flow 38: Records link clicks and redirects to destination
  */
 export const trackingRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -45,7 +45,7 @@ export const trackingRoutes: FastifyPluginAsync = async (app) => {
 
   /**
    * Flow 38: Click Tracking Handler
-   * Records the click and redirects to the destination URL.
+   * Delegates to Flow 38 service, then redirects to the destination URL.
    */
   app.get<{
     Params: { trackingId: string };
@@ -60,16 +60,19 @@ export const trackingRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(400).send({ error: "Missing url parameter" });
       }
 
-      // Fire and forget
-      recordClick(trackingId).catch((err) =>
+      // Delegate to Flow 38 service (fire and forget)
+      handleClick(trackingId).catch((err) =>
         log.error({ err, trackingId }, "Failed to record click"),
       );
 
-      return reply.redirect(302, url);
+      return reply.redirect(url, 302);
     },
   );
 };
 
+/**
+ * Flow 37: Record email open
+ */
 async function recordOpen(trackingId: string): Promise<void> {
   const db = getDb();
 
@@ -104,45 +107,4 @@ async function recordOpen(trackingId: string): Promise<void> {
   });
 
   log.info({ messageId: msg.id, trackingId }, "Open tracked");
-}
-
-async function recordClick(trackingId: string): Promise<void> {
-  const db = getDb();
-
-  const msg = await db.query.messages.findFirst({
-    where: eq(messages.trackingId, trackingId),
-  });
-
-  if (!msg) return;
-
-  const now = new Date();
-
-  await db
-    .update(messages)
-    .set({
-      status: "clicked",
-      clickedAt: now,
-      openedAt: msg.openedAt ?? now, // Click implies open
-      updatedAt: now,
-    })
-    .where(eq(messages.id, msg.id));
-
-  // Update customer engagement
-  if (msg.customerId) {
-    await db
-      .update(customers)
-      .set({ lastClickAt: now, updatedAt: now })
-      .where(eq(customers.id, msg.customerId));
-  }
-
-  // Transition abandon to engaged
-  await transitionAbandonState(msg.abandonId, "ENGAGE");
-
-  await eventBus.emit(EVENTS.MESSAGE_CLICKED, {
-    messageId: msg.id,
-    abandonId: msg.abandonId,
-    channel: msg.channel,
-  });
-
-  log.info({ messageId: msg.id, trackingId }, "Click tracked");
 }

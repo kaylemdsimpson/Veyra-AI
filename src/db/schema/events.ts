@@ -12,8 +12,8 @@ export const events = pgTable("events", {
   payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_events_idempotency").on(table.idempotencyKey),
-  index("idx_events_store_type").on(table.storeId, table.type),
-  index("idx_events_created").on(table.createdAt),
-]);
+}, (table) => ({
+  idxEventsIdempotency: index("idx_events_idempotency").on(table.idempotencyKey),
+  idxEventsStoreType: index("idx_events_store_type").on(table.storeId, table.type),
+  idxEventsCreated: index("idx_events_created").on(table.createdAt),
+}));

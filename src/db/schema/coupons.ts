@@ -29,8 +29,8 @@ export const coupons = pgTable("coupons", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_coupons_code").on(table.code),
-  index("idx_coupons_store_status").on(table.storeId, table.status),
-  index("idx_coupons_expires").on(table.expiresAt),
-]);
+}, (table) => ({
+  idxCouponsCode: index("idx_coupons_code").on(table.code),
+  idxCouponsStoreStatus: index("idx_coupons_store_status").on(table.storeId, table.status),
+  idxCouponsExpires: index("idx_coupons_expires").on(table.expiresAt),
+}));

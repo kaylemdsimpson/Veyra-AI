@@ -32,8 +32,8 @@ export const customers = pgTable("customers", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_customers_store_email").on(table.storeId, table.email),
-  index("idx_customers_store_shopify").on(table.storeId, table.shopifyCustomerId),
-  index("idx_customers_vip").on(table.storeId, table.isVip),
-]);
+}, (table) => ({
+  idxCustomersStoreEmail: index("idx_customers_store_email").on(table.storeId, table.email),
+  idxCustomersStoreShopify: index("idx_customers_store_shopify").on(table.storeId, table.shopifyCustomerId),
+  idxCustomersVip: index("idx_customers_vip").on(table.storeId, table.isVip),
+}));

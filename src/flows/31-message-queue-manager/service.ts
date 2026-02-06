@@ -3,6 +3,7 @@ import { messages, abandons } from "../../db/schema/index.js";
 import { eq, and, lte, inArray } from "drizzle-orm";
 import { createLogger } from "../../lib/logger.js";
 import { enqueue, QUEUES } from "../../lib/queue.js";
+import { detectConflicts } from "../45-conflict-detection/service.js";
 
 const log = createLogger("flow:message-queue-manager");
 
@@ -58,6 +59,24 @@ export async function processMessageQueue(): Promise<number> {
       await db
         .update(messages)
         .set({ status: "failed", lastError: "Abandon no longer active", updatedAt: new Date() })
+        .where(eq(messages.id, msg.id));
+      continue;
+    }
+
+    // Flow 45: Conflict detection — pre-send safety check
+    const conflictResult = await detectConflicts(msg.abandonId, msg.storeId);
+    if (conflictResult.hasConflict) {
+      log.warn(
+        { messageId: msg.id, abandonId: msg.abandonId, conflicts: conflictResult.conflicts },
+        "Message blocked by conflict detection",
+      );
+      await db
+        .update(messages)
+        .set({
+          status: "failed",
+          lastError: `Conflict: ${conflictResult.conflicts.join("; ")}`,
+          updatedAt: new Date(),
+        })
         .where(eq(messages.id, msg.id));
       continue;
     }

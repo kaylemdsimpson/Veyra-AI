@@ -63,13 +63,13 @@ export const abandons = pgTable("abandons", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_abandons_store_state").on(table.storeId, table.state),
-  index("idx_abandons_store_email").on(table.storeId, table.email),
-  index("idx_abandons_checkout_id").on(table.storeId, table.shopifyCheckoutId),
-  index("idx_abandons_expires").on(table.expiresAt),
-  index("idx_abandons_state_created").on(table.state, table.createdAt),
-]);
+}, (table) => ({
+  idxAbandonsStoreState: index("idx_abandons_store_state").on(table.storeId, table.state),
+  idxAbandonsStoreEmail: index("idx_abandons_store_email").on(table.storeId, table.email),
+  idxAbandonsCheckoutId: index("idx_abandons_checkout_id").on(table.storeId, table.shopifyCheckoutId),
+  idxAbandonsExpires: index("idx_abandons_expires").on(table.expiresAt),
+  idxAbandonsStateCreated: index("idx_abandons_state_created").on(table.state, table.createdAt),
+}));
 
 export interface AbandonLineItem {
   productId: string;

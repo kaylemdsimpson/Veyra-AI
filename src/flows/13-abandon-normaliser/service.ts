@@ -5,6 +5,7 @@ import { createLogger } from "../../lib/logger.js";
 import { enqueue, QUEUES } from "../../lib/queue.js";
 import { transition } from "../../lib/state-machine.js";
 import { eventBus, EVENTS } from "../../lib/event-bus.js";
+import { isDuplicate } from "../14-duplicate-resolver/service.js";
 
 const log = createLogger("flow:abandon-normaliser");
 
@@ -73,6 +74,13 @@ export async function normaliseAbandon(
       .update(abandons)
       .set({ state: "expired", updatedAt: new Date() })
       .where(eq(abandons.id, abandonId));
+    return;
+  }
+
+  // ─── Check duplicates (Flow 14) ────────────────────────────
+  const duplicate = await isDuplicate(abandonId, storeId, email);
+  if (duplicate) {
+    log.info({ abandonId }, "Duplicate abandon, cancelled by Flow 14");
     return;
   }
 
