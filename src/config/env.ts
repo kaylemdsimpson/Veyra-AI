@@ -1,12 +1,13 @@
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 
-  // Database
-  DATABASE_URL: z.string().url(),
+  // Database — optional at boot; routes that need it will fail gracefully
+  DATABASE_URL: z.string().default(""),
 
   // Redis
   REDIS_URL: z.string().default("redis://localhost:6379"),
@@ -33,9 +34,9 @@ const envSchema = z.object({
   TWILIO_PHONE_NUMBER: z.string().default(""),
   TWILIO_WHATSAPP_NUMBER: z.string().default("whatsapp:+14155238886"),
 
-  // App
-  APP_SECRET: z.string().min(16),
-  ENCRYPTION_KEY: z.string().min(32),
+  // App — auto-generated if not provided
+  APP_SECRET: z.string().min(16).default(randomBytes(32).toString("hex")),
+  ENCRYPTION_KEY: z.string().min(32).default(randomBytes(32).toString("hex")),
 
   // Feature flags
   ENABLE_SMS: z.coerce.boolean().default(false),
@@ -59,7 +60,27 @@ export function loadEnv(): Env {
     console.error("─────────────────────────────────────────────────");
     throw new Error("Invalid environment configuration — see above for details");
   }
+
   _env = result.data;
+
+  // Log warnings about missing optional config so operators know what to set
+  const warnings: string[] = [];
+  if (!_env.DATABASE_URL) warnings.push("DATABASE_URL not set — database features disabled");
+  if (!_env.SHOPIFY_API_KEY) warnings.push("SHOPIFY_API_KEY not set — Shopify OAuth disabled");
+  if (!_env.STRIPE_SECRET_KEY) warnings.push("STRIPE_SECRET_KEY not set — billing disabled");
+  if (!_env.RESEND_API_KEY) warnings.push("RESEND_API_KEY not set — email sending disabled");
+  if (!_env.TWILIO_ACCOUNT_SID) warnings.push("TWILIO_ACCOUNT_SID not set — SMS/WhatsApp disabled");
+  if (!process.env.APP_SECRET) warnings.push("APP_SECRET auto-generated (set explicitly for stable JWT signing across restarts)");
+  if (!process.env.ENCRYPTION_KEY) warnings.push("ENCRYPTION_KEY auto-generated (set explicitly for stable token encryption across restarts)");
+
+  if (warnings.length > 0) {
+    console.warn("──── Environment warnings ────");
+    for (const w of warnings) {
+      console.warn(`  ⚠ ${w}`);
+    }
+    console.warn("──────────────────────────────");
+  }
+
   return _env;
 }
 

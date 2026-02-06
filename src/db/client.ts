@@ -8,7 +8,11 @@ let _sql: ReturnType<typeof postgres> | null = null;
 
 export function getDb() {
   if (_db) return _db;
-  _sql = postgres(env().DATABASE_URL, {
+  const url = env().DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is not configured — add a Postgres database to your Railway project or set the variable manually");
+  }
+  _sql = postgres(url, {
     max: 20,
     idle_timeout: 20,
     connect_timeout: 10,
