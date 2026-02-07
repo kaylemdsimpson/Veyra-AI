@@ -8,6 +8,8 @@ import { createLogger } from "./lib/logger.js";
 import { closeDb } from "./db/client.js";
 import { closeRedis } from "./lib/redis.js";
 import { closeAllQueues } from "./lib/queue.js";
+import { runMigrations } from "./db/migrate.js";
+import { initSentry, captureException } from "./lib/sentry.js";
 
 // Routes
 import { shopifyAuthRoutes } from "./flows/01-shopify-oauth/routes.js";
@@ -27,6 +29,10 @@ const app = Fastify({
 });
 
 async function start() {
+  // Init error tracking & run database migrations
+  initSentry();
+  await runMigrations();
+
   // Plugins
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
@@ -64,6 +70,7 @@ async function start() {
   // Global error handler
   app.setErrorHandler((error: unknown, _request, reply) => {
     log.error({ err: error }, "Unhandled error");
+    captureException(error);
     const statusCode = (error as any).statusCode ?? 500;
     reply.status(statusCode).send({
       error: (error as any).message ?? "Unknown error",

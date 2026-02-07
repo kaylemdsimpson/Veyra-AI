@@ -38,6 +38,9 @@ const envSchema = z.object({
   APP_SECRET: z.string().min(16).default(randomBytes(32).toString("hex")),
   ENCRYPTION_KEY: z.string().min(32).default(randomBytes(32).toString("hex")),
 
+  // Error tracking
+  SENTRY_DSN: z.string().default(""),
+
   // Feature flags
   ENABLE_SMS: z.coerce.boolean().default(false),
   ENABLE_WHATSAPP: z.coerce.boolean().default(false),
