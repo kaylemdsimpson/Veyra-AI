@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { createLogger } from "../../lib/logger.js";
 import { detectCartAbandon, type CartAbandonPayload } from "./service.js";
 import { detectBrowseAbandon, type BrowseAbandonPayload } from "../10-browse-abandon-detector/service.js";
+import { verifySnippetToken } from "../../lib/snippet-auth.js";
 import { getDb } from "../../db/client.js";
 import { stores } from "../../db/schema/index.js";
 import { eq } from "drizzle-orm";
@@ -11,18 +12,23 @@ const log = createLogger("flow:ingest-routes");
 /**
  * Flows 9 & 10: Cart & Browse Abandon Ingest Endpoints
  *
- * These are called by the client-side tracking script (Shopify ScriptTag)
- * to report cart and browse abandon events.
+ * Called by the client-side tracking snippet (v.js) to report abandon events.
  *
- * Authentication: Store API key in X-Veyra-Store-Id header.
- * In production, this should use a signed token. For MVP, store ID is sufficient.
+ * Authentication: Domain-bound HMAC snippet token via X-Veyra-Token header.
+ * Falls back to legacy X-Veyra-Store-Id for backwards compatibility.
  */
 export const ingestRoutes: FastifyPluginAsync = async (app) => {
-  // Validate store exists
+  // Authenticate via snippet token (preferred) or legacy store ID
   app.addHook("preHandler", async (request, reply) => {
+    const token = request.headers["x-veyra-token"] as string;
+    if (token) {
+      return verifySnippetToken(request, reply);
+    }
+
+    // Legacy fallback: raw store ID
     const storeId = request.headers["x-veyra-store-id"] as string;
     if (!storeId) {
-      return reply.status(401).send({ error: "Missing X-Veyra-Store-Id header" });
+      return reply.status(401).send({ error: "Missing authentication" });
     }
 
     const db = getDb();

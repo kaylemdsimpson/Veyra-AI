@@ -1,6 +1,7 @@
 "use client";
 
-import { useStore, useIntegrationHealth, useBilling } from "@/lib/queries";
+import { useState } from "react";
+import { useStore, useIntegrationHealth, useBilling, useSnippetInstall, useFlowStatus } from "@/lib/queries";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ExternalLink, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { ExternalLink, CheckCircle, AlertTriangle, XCircle, Copy, Check, Code2 } from "lucide-react";
 
 function StatusIcon({ status }: { status: "healthy" | "degraded" | "error" }) {
   if (status === "healthy") return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -27,11 +28,38 @@ function StoreSkeleton() {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+    >
+      {copied ? (
+        <>
+          <Check className="mr-2 h-4 w-4" /> Copied
+        </>
+      ) : (
+        <>
+          <Copy className="mr-2 h-4 w-4" /> Copy snippet
+        </>
+      )}
+    </Button>
+  );
+}
+
 export default function SettingsPage() {
   const { user, logout } = useAuth();
   const { data: store, isLoading: storeLoading } = useStore();
   const { data: health, isLoading: healthLoading } = useIntegrationHealth();
   const { data: billing, isLoading: billingLoading } = useBilling();
+  const { data: snippetData, isLoading: snippetLoading } = useSnippetInstall(store?.id);
+  const { data: flowStatus, isLoading: flowLoading } = useFlowStatus(store?.id);
 
   return (
     <div className="space-y-8">
@@ -40,14 +68,130 @@ export default function SettingsPage() {
         <p className="text-muted-foreground">Manage your store, account, billing, and integrations.</p>
       </div>
 
-      <Tabs defaultValue="store">
+      <Tabs defaultValue="install">
         <TabsList>
+          <TabsTrigger value="install">Install</TabsTrigger>
           <TabsTrigger value="store">Store</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="health">Health</TabsTrigger>
           <TabsTrigger value="support">Support</TabsTrigger>
         </TabsList>
+
+        {/* ─── Install ─────────────────────────────────────── */}
+        <TabsContent value="install" className="mt-6 space-y-6">
+          {snippetLoading || storeLoading ? (
+            <StoreSkeleton />
+          ) : snippetData ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <Code2 className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle>Tracking Snippet</CardTitle>
+                      <CardDescription>
+                        Paste this into your Shopify theme to activate Veyra on your storefront.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="relative">
+                    <pre className="overflow-x-auto rounded-lg border bg-muted/50 p-4 text-sm font-mono">
+                      {snippetData.snippet}
+                    </pre>
+                    <div className="mt-3">
+                      <CopyButton text={snippetData.snippet} />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Installation steps</p>
+                    {snippetData.instructions.map((step, i) => (
+                      <p key={i} className="text-sm text-muted-foreground">{step}</p>
+                    ))}
+                  </div>
+
+                  <Separator />
+
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Security notice
+                    </p>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      This token is bound to <strong>{snippetData.domain}</strong>. It will only work on your
+                      registered Shopify domain. Sharing it with other stores will not work — they will need
+                      to install Veyra separately.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Flow Status */}
+              {flowStatus && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Active Flows</CardTitle>
+                    <CardDescription>
+                      {flowStatus.activeFlows} of {flowStatus.totalFlows} flows are active based on your
+                      current settings. Flows activate automatically — no configuration needed.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-2xl font-bold text-green-600">{flowStatus.activeFlows}</p>
+                        <p className="text-xs text-muted-foreground">Active</p>
+                      </div>
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-2xl font-bold text-muted-foreground">{flowStatus.inactiveFlows}</p>
+                        <p className="text-xs text-muted-foreground">Inactive</p>
+                      </div>
+                      <div className="rounded-lg border p-3 text-center">
+                        <p className="text-2xl font-bold">{flowStatus.totalFlows}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                      </div>
+                    </div>
+
+                    {flowStatus.flows && flowStatus.flows.length > 0 && (
+                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {flowStatus.flows.map((flow) => (
+                          <div key={flow.id} className="flex items-center justify-between py-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className={`h-2 w-2 rounded-full ${flow.active ? "bg-green-500" : "bg-gray-300"}`} />
+                              <span className="text-sm">
+                                <span className="text-muted-foreground font-mono text-xs mr-2">
+                                  {String(flow.id).padStart(2, "0")}
+                                </span>
+                                {flow.name}
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground max-w-[200px] truncate">
+                              {flow.reason}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-muted-foreground">
+                  Connect your Shopify store to generate your tracking snippet.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         {/* ─── Store ──────────────────────────────────────── */}
         <TabsContent value="store" className="mt-6 space-y-6">

@@ -18,6 +18,7 @@ import { trackingRoutes } from "./flows/37-open-tracking/routes.js";
 import { dashboardRoutes } from "./flows/48-dashboard-metrics/routes.js";
 import { stripeWebhookRoutes } from "./flows/44-stripe-usage-reporter/routes.js";
 import { ingestRoutes } from "./flows/09-cart-abandon-detector/routes.js";
+import { snippetRoutes } from "./routes/snippet.js";
 
 loadEnv();
 const log = createLogger("server");
@@ -55,6 +56,7 @@ async function start() {
       webhooks: "/webhooks/shopify",
       dashboard: "/api/dashboard",
       ingest: "/ingest",
+      snippet: "/snippet",
     },
   }));
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
@@ -66,6 +68,7 @@ async function start() {
   await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
   await app.register(stripeWebhookRoutes, { prefix: "/webhooks/stripe" });
   await app.register(ingestRoutes, { prefix: "/ingest" });
+  await app.register(snippetRoutes, { prefix: "/snippet" });
 
   // Global error handler
   app.setErrorHandler((error: unknown, _request, reply) => {

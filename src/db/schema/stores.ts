@@ -20,6 +20,9 @@ export const stores = pgTable("stores", {
   timezone: text("timezone").default("UTC"),
   status: storeStatusEnum("status").default("active").notNull(),
 
+  // Snippet — domain-bound HMAC token for client-side tracking script
+  snippetToken: text("snippet_token"),
+
   // Stripe
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),

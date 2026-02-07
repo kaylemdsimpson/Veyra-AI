@@ -127,6 +127,54 @@ export function useOnboardingStatus() {
   });
 }
 
+// ─── Snippet ─────────────────────────────────────────────────
+export function useSnippetInstall(storeId: string | undefined) {
+  const { isDemo } = useAuth();
+  return useQuery({
+    queryKey: ["snippet-install", storeId],
+    queryFn: () =>
+      isDemo
+        ? {
+            snippet: '<!-- Veyra Recovery -->\n<script src="https://app.veyra.com/snippet/v.js" data-veyra-token="veyra_demo_token" async></script>\n<!-- End Veyra -->',
+            token: "veyra_demo_token",
+            domain: "demo-store.myshopify.com",
+            instructions: [
+              "1. Copy the snippet above",
+              "2. In Shopify Admin, go to Online Store → Themes → Edit Code",
+              "3. Open theme.liquid",
+              "4. Paste the snippet just before the closing </head> tag",
+              "5. Save — Veyra is now active on your storefront",
+            ],
+          }
+        : api.get<{
+            snippet: string;
+            token: string;
+            domain: string;
+            instructions: string[];
+          }>(`/snippet/install?storeId=${storeId}`),
+    enabled: !!storeId,
+  });
+}
+
+export function useFlowStatus(storeId: string | undefined) {
+  const { isDemo } = useAuth();
+  return useQuery({
+    queryKey: ["flow-status", storeId],
+    queryFn: () =>
+      isDemo
+        ? { storeId: "demo", snippetInstalled: true, totalFlows: 48, activeFlows: 42, inactiveFlows: 6, flows: [] }
+        : api.get<{
+            storeId: string;
+            snippetInstalled: boolean;
+            totalFlows: number;
+            activeFlows: number;
+            inactiveFlows: number;
+            flows: Array<{ id: number; name: string; active: boolean; reason: string }>;
+          }>(`/snippet/status?storeId=${storeId}`),
+    enabled: !!storeId,
+  });
+}
+
 // ─── Analytics ────────────────────────────────────────────────
 export function useFunnel(period = "30d") {
   const { isDemo } = useAuth();

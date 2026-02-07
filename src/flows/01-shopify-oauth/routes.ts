@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { randomBytes } from "node:crypto";
 import { buildAuthUrl, exchangeToken } from "../../lib/shopify.js";
 import { encrypt } from "../../lib/crypto.js";
+import { generateSnippetToken } from "../../lib/snippet-token.js";
 import { getDb } from "../../db/client.js";
 import { stores } from "../../db/schema/index.js";
 import { eq } from "drizzle-orm";
@@ -67,10 +68,13 @@ export const shopifyAuthRoutes: FastifyPluginAsync = async (app) => {
 
     let storeId: string;
     if (existing) {
+      // Re-generate snippet token on re-install (old one is invalidated)
+      const snippetToken = generateSnippetToken(existing.id, shop);
       await db
         .update(stores)
         .set({
           shopifyAccessToken: encryptedToken,
+          snippetToken,
           status: "active",
           uninstalledAt: null,
           installedAt: new Date(),
@@ -90,6 +94,14 @@ export const shopifyAuthRoutes: FastifyPluginAsync = async (app) => {
         })
         .returning({ id: stores.id });
       storeId = newStore!.id;
+
+      // Generate domain-bound snippet token
+      const snippetToken = generateSnippetToken(storeId, shop);
+      await db
+        .update(stores)
+        .set({ snippetToken, updatedAt: new Date() })
+        .where(eq(stores.id, storeId));
+
       log.info({ shop, storeId }, "New store installed");
     }
 
