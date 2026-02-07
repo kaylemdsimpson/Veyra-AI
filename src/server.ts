@@ -38,7 +38,19 @@ async function start() {
   await app.register(cookie);
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
-  // Health check
+  // Root & health check
+  app.get("/", async () => ({
+    name: "Veyra API",
+    status: "ok",
+    version: "1.0.0",
+    docs: {
+      health: "/health",
+      auth: "/auth/shopify",
+      webhooks: "/webhooks/shopify",
+      dashboard: "/api/dashboard",
+      ingest: "/ingest",
+    },
+  }));
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
   // Routes
