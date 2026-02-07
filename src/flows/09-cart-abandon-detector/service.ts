@@ -1,3 +1,4 @@
+import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import { abandons } from "../../db/schema/index.js";
 import { createLogger } from "../../lib/logger.js";
@@ -39,12 +40,11 @@ export async function detectCartAbandon(payload: CartAbandonPayload): Promise<vo
 
   // Check for existing checkout abandon with same cart token (checkout takes priority)
   const existingCheckout = await db.query.abandons.findFirst({
-    where: (a, { eq, and }) =>
-      and(
-        eq(a.storeId, payload.storeId),
-        eq(a.shopifyCartToken, payload.cartToken),
-        eq(a.type, "checkout"),
-      ),
+    where: and(
+      eq(abandons.storeId, payload.storeId),
+      eq(abandons.shopifyCartToken, payload.cartToken),
+      eq(abandons.type, "checkout"),
+    ),
   });
 
   if (existingCheckout) {
@@ -54,12 +54,11 @@ export async function detectCartAbandon(payload: CartAbandonPayload): Promise<vo
 
   // Check if we already have this cart abandon
   const existingCart = await db.query.abandons.findFirst({
-    where: (a, { eq, and }) =>
-      and(
-        eq(a.storeId, payload.storeId),
-        eq(a.shopifyCartToken, payload.cartToken),
-        eq(a.type, "cart"),
-      ),
+    where: and(
+      eq(abandons.storeId, payload.storeId),
+      eq(abandons.shopifyCartToken, payload.cartToken),
+      eq(abandons.type, "cart"),
+    ),
   });
 
   if (existingCart) {

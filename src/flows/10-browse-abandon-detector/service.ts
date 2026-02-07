@@ -1,3 +1,4 @@
+import { eq, and, notInArray } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import { abandons } from "../../db/schema/index.js";
 import { createLogger } from "../../lib/logger.js";
@@ -35,13 +36,12 @@ export async function detectBrowseAbandon(payload: BrowseAbandonPayload): Promis
 
   // Don't create browse abandons if there's an active checkout/cart abandon for this email
   const activeAbandon = await db.query.abandons.findFirst({
-    where: (a, { eq, and, notInArray }) =>
-      and(
-        eq(a.storeId, payload.storeId),
-        eq(a.email, payload.email),
-        notInArray(a.state, ["recovered", "expired", "cancelled"]),
-        notInArray(a.type, ["browse"]),
-      ),
+    where: and(
+      eq(abandons.storeId, payload.storeId),
+      eq(abandons.email, payload.email),
+      notInArray(abandons.state, ["recovered", "expired", "cancelled"]),
+      notInArray(abandons.type, ["browse"]),
+    ),
   });
 
   if (activeAbandon) {
