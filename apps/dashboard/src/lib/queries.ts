@@ -11,34 +11,49 @@ import type {
   FunnelStep,
 } from "@veyra/types";
 import { api } from "./api";
+import { useAuth } from "./auth";
+import {
+  DEMO_METRICS,
+  DEMO_CAMPAIGNS,
+  DEMO_BILLING,
+  DEMO_HEALTH,
+  DEMO_ONBOARDING,
+  DEMO_STORE,
+  DEMO_REVENUE,
+  DEMO_FUNNEL,
+} from "./demo-data";
 
 // ─── Dashboard ────────────────────────────────────────────────
 export function useMetrics(period = "30d") {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["metrics", period],
-    queryFn: () => api.get<DashboardMetrics>(`/api/dashboard/metrics?period=${period}`),
+    queryFn: () => isDemo ? DEMO_METRICS : api.get<DashboardMetrics>(`/api/dashboard/metrics?period=${period}`),
   });
 }
 
 export function useRevenueOverTime(period = "30d") {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["revenue-over-time", period],
-    queryFn: () => api.get<RevenueDataPoint[]>(`/api/dashboard/revenue?period=${period}`),
+    queryFn: () => isDemo ? DEMO_REVENUE : api.get<RevenueDataPoint[]>(`/api/dashboard/revenue?period=${period}`),
   });
 }
 
 // ─── Campaigns ────────────────────────────────────────────────
 export function useCampaigns() {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["campaigns"],
-    queryFn: () => api.get<Campaign[]>("/api/campaigns"),
+    queryFn: () => isDemo ? DEMO_CAMPAIGNS : api.get<Campaign[]>("/api/campaigns"),
   });
 }
 
 export function useCampaign(id: string) {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["campaigns", id],
-    queryFn: () => api.get<Campaign>(`/api/campaigns/${id}`),
+    queryFn: () => isDemo ? DEMO_CAMPAIGNS.find((c) => c.id === id)! : api.get<Campaign>(`/api/campaigns/${id}`),
     enabled: !!id,
   });
 }
@@ -70,47 +85,53 @@ export function useDeleteCampaign() {
 
 // ─── Billing ──────────────────────────────────────────────────
 export function useBilling() {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["billing"],
-    queryFn: () => api.get<BillingInfo>("/api/billing"),
+    queryFn: () => isDemo ? DEMO_BILLING : api.get<BillingInfo>("/api/billing"),
   });
 }
 
 export function useRecoveries(period = "30d") {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["recoveries", period],
-    queryFn: () => api.get<RecoveryEntry[]>(`/api/recoveries?period=${period}`),
+    queryFn: () => isDemo ? [] as RecoveryEntry[] : api.get<RecoveryEntry[]>(`/api/recoveries?period=${period}`),
   });
 }
 
 // ─── Store & Health ───────────────────────────────────────────
 export function useStore() {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["store"],
-    queryFn: () => api.get<Store>("/api/store"),
+    queryFn: () => isDemo ? DEMO_STORE : api.get<Store>("/api/store"),
   });
 }
 
 export function useIntegrationHealth() {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["health"],
-    queryFn: () => api.get<IntegrationHealth>("/api/health/integration"),
-    refetchInterval: 60_000,
+    queryFn: () => isDemo ? DEMO_HEALTH : api.get<IntegrationHealth>("/api/health/integration"),
+    refetchInterval: isDemo ? false : 60_000,
   });
 }
 
 // ─── Onboarding ───────────────────────────────────────────────
 export function useOnboardingStatus() {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["onboarding"],
-    queryFn: () => api.get<OnboardingStatus>("/api/onboarding/status"),
+    queryFn: () => isDemo ? DEMO_ONBOARDING : api.get<OnboardingStatus>("/api/onboarding/status"),
   });
 }
 
 // ─── Analytics ────────────────────────────────────────────────
 export function useFunnel(period = "30d") {
+  const { isDemo } = useAuth();
   return useQuery({
     queryKey: ["funnel", period],
-    queryFn: () => api.get<FunnelStep[]>(`/api/analytics/funnel?period=${period}`),
+    queryFn: () => isDemo ? DEMO_FUNNEL : api.get<FunnelStep[]>(`/api/analytics/funnel?period=${period}`),
   });
 }
