@@ -132,6 +132,52 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
+              {/* Third-Party Tools */}
+              {store?.detectedTools && (store.detectedTools as any[]).length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Detected Recovery Tools</CardTitle>
+                    <CardDescription>
+                      Veyra detected these third-party tools on your store and will coordinate
+                      automatically to avoid double-messaging your customers.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {(store.detectedTools as any[]).map((tool: any) => (
+                      <div key={tool.id} className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
+                            <span className="text-xs font-bold">
+                              {tool.name.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{tool.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tool.channels.join(", ")} {tool.hasAbandonCartFlow ? "— has abandon cart flow" : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant={tool.confidence >= 0.9 ? "default" : "secondary"}>
+                          {tool.confidence >= 0.9 ? "Confirmed" : "Likely"}
+                        </Badge>
+                      </div>
+                    ))}
+                    <Separator />
+                    <div className="rounded-lg bg-muted/50 p-3">
+                      <p className="text-sm font-medium">Coordination mode: <span className="text-primary">{(store.settings as any)?.thirdPartyMode ?? "complement"}</span></p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(store.settings as any)?.thirdPartyMode === "monitor"
+                          ? "Veyra is tracking abandons only — no messages sent. Switch to 'complement' to start recovering."
+                          : (store.settings as any)?.thirdPartyMode === "replace"
+                            ? "Veyra handles all recovery. Make sure third-party abandon flows are disabled."
+                            : "Veyra fills channel gaps and delays messages to avoid overlap with existing tools."}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Flow Status */}
               {flowStatus && (
                 <Card>

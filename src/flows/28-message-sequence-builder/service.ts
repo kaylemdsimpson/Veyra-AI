@@ -6,8 +6,10 @@ import { createLogger } from "../../lib/logger.js";
 import { transitionAbandonState } from "../16-recovery-state-machine/service.js";
 import { checkDiscountEligibility } from "../23-discount-eligibility/service.js";
 import { detectChannelPreference } from "../21-channel-preference/service.js";
+import { computeThirdPartyDelay } from "../45-conflict-detection/service.js";
+import { getThirdPartyCoveredChannels } from "../../lib/third-party-detector.js";
 import { enqueue, QUEUES } from "../../lib/queue.js";
-import type { StoreSettings } from "../../db/schema/stores.js";
+import type { StoreSettings, DetectedThirdPartyTool } from "../../db/schema/stores.js";
 
 const log = createLogger("flow:message-sequence-builder");
 
@@ -26,6 +28,7 @@ const log = createLogger("flow:message-sequence-builder");
  *  - Cart abandons: 2-3 messages
  *  - Checkout abandons: up to 3 messages
  *  - VIP customers: may get faster timing
+ *  - Third-party tools detected: delays timing, reduces message count, or switches channel
  */
 
 interface SequenceStep {
@@ -51,12 +54,41 @@ export async function buildMessageSequence(
     where: eq(stores.id, storeId),
   });
   const settings = store?.settings as StoreSettings | undefined;
+  const detectedTools = (store?.detectedTools as DetectedThirdPartyTool[] | null) ?? [];
+  const thirdPartyMode = settings?.thirdPartyMode ?? "complement";
   const maxMessages = settings?.maxMessagesPerRecovery ?? 3;
 
-  // Determine channel preference
-  const channels = abandon.customerId
+  // ─── Monitor mode: skip sequence entirely ───────────────────
+  if (thirdPartyMode === "monitor" && detectedTools.length > 0) {
+    log.info(
+      { abandonId, storeId },
+      "Monitor mode — skipping message sequence (tracking only)",
+    );
+    // Still transition state so the abandon is tracked through the funnel
+    await transitionAbandonState(abandonId, "SEQUENCE_BUILT");
+    return;
+  }
+
+  // ─── Determine channel preference ──────────────────────────
+  let channels = abandon.customerId
     ? await detectChannelPreference(abandon.customerId, storeId)
     : (abandon.email ? ["email" as const] : []);
+
+  // In complement mode: prefer uncovered channels
+  if (thirdPartyMode === "complement" && detectedTools.length > 0) {
+    const coveredChannels = getThirdPartyCoveredChannels(detectedTools);
+    const uncoveredAvailable = channels.filter((ch) => !coveredChannels.has(ch));
+
+    if (uncoveredAvailable.length > 0) {
+      log.info(
+        { abandonId, uncovered: uncoveredAvailable, covered: [...coveredChannels] },
+        "Complement mode — prioritising uncovered channels",
+      );
+      // Put uncovered channels first, covered channels as fallback
+      const coveredAvailable = channels.filter((ch) => coveredChannels.has(ch));
+      channels = [...uncoveredAvailable, ...coveredAvailable];
+    }
+  }
 
   if (channels.length === 0) {
     log.warn({ abandonId }, "No available channels for messaging");
@@ -71,13 +103,42 @@ export async function buildMessageSequence(
 
   // Build sequence based on abandon type
   const sequence: SequenceStep[] = [];
-  const abandonType = abandon.type;
+  const abandonType = abandon.type as "checkout" | "cart" | "browse";
 
   // Message count by type
-  const messageCount =
+  let messageCount =
     abandonType === "browse" ? Math.min(2, maxMessages)
     : abandonType === "cart" ? Math.min(3, maxMessages)
     : maxMessages;
+
+  // ─── Third-party timing adjustment ─────────────────────────
+  let delayOffset = 0;
+  if (thirdPartyMode === "complement" && detectedTools.length > 0) {
+    delayOffset = computeThirdPartyDelay(detectedTools, abandonType);
+
+    // In complement mode with full channel coverage, reduce message count
+    // to avoid over-messaging alongside the third-party tool
+    const coveredChannels = getThirdPartyCoveredChannels(detectedTools);
+    if (coveredChannels.has(primaryChannel) && messageCount > 1) {
+      messageCount = Math.max(1, messageCount - 1);
+      log.info(
+        { abandonId, originalCount: maxMessages, adjustedCount: messageCount },
+        "Reduced message count for complement mode",
+      );
+    }
+
+    if (delayOffset > 0) {
+      log.info(
+        {
+          abandonId,
+          delayOffset,
+          tools: detectedTools.map((t) => t.name),
+          abandonType,
+        },
+        "Applying third-party delay offset",
+      );
+    }
+  }
 
   // Timing profiles (minutes after abandon)
   const timingProfiles: Record<string, number[]> = {
@@ -101,7 +162,7 @@ export async function buildMessageSequence(
     sequence.push({
       step,
       channel: primaryChannel,
-      delayMinutes: timings[i] ?? timings[timings.length - 1]!,
+      delayMinutes: (timings[i] ?? timings[timings.length - 1]!) + delayOffset,
       includeDiscount,
       templateKey,
     });
@@ -128,6 +189,9 @@ export async function buildMessageSequence(
       includesDiscount: step.includeDiscount ? 1 : 0,
       trackingId,
       scheduledFor,
+      metadata: delayOffset > 0
+        ? { thirdPartyDelayMinutes: delayOffset, complementMode: true }
+        : {},
     });
   }
 
@@ -135,7 +199,15 @@ export async function buildMessageSequence(
   await enqueue(QUEUES.MESSAGE_SCHEDULE, { abandonId, storeId });
 
   log.info(
-    { abandonId, storeId, messageCount: sequence.length, primaryChannel },
+    {
+      abandonId,
+      storeId,
+      messageCount: sequence.length,
+      primaryChannel,
+      delayOffset,
+      thirdPartyMode,
+      detectedTools: detectedTools.map((t) => t.name),
+    },
     "Message sequence built",
   );
 }

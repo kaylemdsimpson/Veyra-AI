@@ -32,6 +32,9 @@ export const QUEUES = {
   // Billing
   LEDGER_WRITE: "ledger-write",
   STRIPE_REPORT: "stripe-report",
+
+  // Third-party detection
+  THIRD_PARTY_DETECT: "third-party-detect",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

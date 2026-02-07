@@ -113,6 +113,7 @@ export const shopifyAuthRoutes: FastifyPluginAsync = async (app) => {
     });
     await enqueue(QUEUES.STORE_SYNC, { storeId, shop });
     await enqueue(QUEUES.CUSTOMER_SYNC, { storeId, shop });
+    await enqueue(QUEUES.THIRD_PARTY_DETECT, { storeId, shop });
 
     await eventBus.emit(EVENTS.STORE_INSTALLED, { storeId, shop });
 

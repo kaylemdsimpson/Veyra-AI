@@ -39,7 +39,12 @@ export const stores = pgTable("stores", {
     maxMessagesPerRecovery: 3,
     respectMarketingConsent: true,
     autoPauseOnHighUnsubscribe: true,
+    thirdPartyMode: "complement",
   }),
+
+  // Third-party recovery tool detection
+  detectedTools: jsonb("detected_tools").$type<DetectedThirdPartyTool[]>().default([]),
+  thirdPartyDetectedAt: timestamp("third_party_detected_at", { withTimezone: true }),
 
   // Sync tracking
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
@@ -62,4 +67,29 @@ export interface StoreSettings {
   maxMessagesPerRecovery: number;
   respectMarketingConsent: boolean;
   autoPauseOnHighUnsubscribe: boolean;
+
+  /**
+   * How Veyra coordinates with third-party recovery tools:
+   *
+   * - "complement": Veyra fills gaps (e.g., sends SMS/WhatsApp if third party does email only).
+   *                  Delays first message to avoid overlap. Default for stores with detected tools.
+   * - "replace":    Veyra takes over all recovery. Merchant should disable third-party flows.
+   * - "monitor":    Veyra tracks abandons and attributions but doesn't send messages.
+   *                  Shows incremental value dashboard only.
+   */
+  thirdPartyMode: "complement" | "replace" | "monitor";
+}
+
+/**
+ * Represents a detected third-party recovery/marketing tool on the store.
+ */
+export interface DetectedThirdPartyTool {
+  id: string;
+  name: string;
+  category: "email_marketing" | "sms_marketing" | "multi_channel" | "cart_recovery";
+  detectedVia: "shopify_scripts" | "shopify_apps" | "webhook_headers" | "dom_scan" | "manual";
+  channels: Array<"email" | "sms" | "whatsapp" | "push">;
+  hasAbandonCartFlow: boolean;
+  confidence: number; // 0.0 - 1.0
+  detectedAt: string; // ISO timestamp
 }

@@ -41,6 +41,7 @@ import { calculateDiscountValue } from "../flows/24-discount-value-calculator/se
 import { generateCoupon } from "../flows/26-dynamic-coupon-generator/service.js";
 import { writeLedgerEntry } from "../flows/41-recovery-ledger/service.js";
 import { reportUsageToStripe } from "../flows/44-stripe-usage-reporter/service.js";
+import { detectThirdPartyTools, getCoordinationRecommendation } from "../lib/third-party-detector.js";
 import { getDb } from "../db/client.js";
 import { stores } from "../db/schema/index.js";
 import { eq } from "drizzle-orm";
@@ -297,6 +298,47 @@ createWorker({
   queueName: QUEUES.STRIPE_REPORT,
   handler: async (job) => {
     await reportUsageToStripe(job.data as any);
+  },
+  concurrency: 3,
+});
+
+// ─── Third-Party Detection Worker ────────────────────────────
+createWorker({
+  queueName: QUEUES.THIRD_PARTY_DETECT,
+  handler: async (job) => {
+    const { storeId, shop } = job.data as any;
+
+    const db = getDb();
+    const store = await db.query.stores.findFirst({
+      where: eq(stores.id, storeId),
+      columns: { id: true, shopifyAccessToken: true },
+    });
+
+    if (!store) return;
+
+    const tools = await detectThirdPartyTools(shop, store.shopifyAccessToken);
+    const recommendation = getCoordinationRecommendation(tools);
+
+    // Persist detected tools and recommendation
+    await db
+      .update(stores)
+      .set({
+        detectedTools: tools,
+        thirdPartyDetectedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(stores.id, storeId));
+
+    log.info(
+      {
+        storeId,
+        shop,
+        toolCount: tools.length,
+        tools: tools.map((t) => t.name),
+        recommendedMode: recommendation.recommendedMode,
+      },
+      "Third-party detection complete",
+    );
   },
   concurrency: 3,
 });
